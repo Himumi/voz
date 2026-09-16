@@ -16,15 +16,17 @@ pub fn main(init: std.process.Init) !void {
     const stderr = &stderr_writer.interface;
 
     var ctx: Context = .{
+        .io = init.io,
         .stdout = stdout,
         .stderr = stderr,
     };
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len <= 1) {
-        try cli.printHelp(init.io, &ctx, cli.help_message);
+        try cli.printHelp(&ctx, cli.help_message);
     } else {
-        try stderr.print("run command\n", .{});
+        const command = try cli.parse(args);
+        try cli.run(&ctx, command);
     }
     return try ctx.flush();
 }

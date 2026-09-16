@@ -5,6 +5,38 @@ const Io = std.Io;
 
 const Context = @import("root.zig").Context;
 
+pub fn run(ctx: *Context, command: Command) !void {
+    switch (command.kind) {
+        .help => return try printHelp(ctx, help_message),
+        .install => {
+            if (command.options.help) {
+                return try printHelp(ctx, install_message);
+            }
+        },
+        .list => {
+            if (command.options.help) {
+                return try printHelp(ctx, list_message);
+            }
+        },
+        .remove => {
+            if (command.options.help) {
+                return try printHelp(ctx, remove_message);
+            }
+        },
+        .upgrade => {
+            if (command.options.help) {
+                return try printHelp(ctx, upgrade_message);
+            }
+        },
+        .use => {
+            if (command.options.help) {
+                return try printHelp(ctx, use_message);
+            }
+        },
+        .version => try ctx.stderr.print("0.0.0\n", .{}),
+    }
+}
+
 pub fn parse(args: []const [:0]const u8) error{InvalidOption}!Command {
     var command: Command = undefined;
 
@@ -278,9 +310,9 @@ pub const upgrade_message =
 
 pub const copyright_fmt = "Copyright © {d} Himumi\n";
 
-pub fn printHelp(io: Io, ctx: *Context, message: []const u8) !void {
+pub fn printHelp(ctx: *Context, message: []const u8) !void {
     try ctx.stderr.print("{s}", .{message});
-    try ctx.stderr.print(copyright_fmt, .{getCurrentYear(io)});
+    try ctx.stderr.print(copyright_fmt, .{getCurrentYear(ctx.io)});
 }
 
 fn getCurrentYear(io: std.Io) u16 {
