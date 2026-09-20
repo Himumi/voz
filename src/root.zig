@@ -1,5 +1,6 @@
 const std = @import("std");
 const json = std.json;
+const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
 pub const cli = @import("cli.zig");
@@ -18,9 +19,11 @@ pub const Context = struct {
 pub const Setting = struct {
     mirrorlist: []const u8,
     pubkey: []const u8,
-    zig_version_url: []const u8,
-    zls_version_url: []const u8,
-    local_versions: []const []const u8,
+    zig_url: []const u8,
+    zls_url: []const u8,
+    locals: []const []const u8,
+    zig: []const u8,
+    zls: []const u8,
 
     pub const file_name = "setting.json";
 
@@ -31,11 +34,15 @@ pub const Setting = struct {
 };
 
 pub const default_setting: Setting = .{
+    .zig_url = "https://ziglang.org/download/index.json",
+    .zls_url = "https://builds.zigtools.org/index.json",
     .mirrorlist = "https://ziglang.org/download/community-mirrors.txt",
     .pubkey = "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U",
-    .zig_version_url = "https://ziglang.org/download/index.json",
-    .zls_version_url = "https://builds.zigtools.org/index.json",
-    .local_versions = &.{},
+    // Installed Zig versions.
+    .locals = &.{},
+    // Current versions
+    .zig = &.{},
+    .zls = &.{},
 };
 
 pub const setting = "setting.json";

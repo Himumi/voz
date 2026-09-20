@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
         .stderr = stderr,
     };
 
+    try voz.initFiles(ctx.io);
+
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len <= 1) {
         try cli.printHelp(&ctx, cli.help_message);
