@@ -6,6 +6,7 @@ const Io = std.Io;
 pub const cli = @import("cli.zig");
 
 pub const Context = struct {
+    allocator: Allocator,
     io: Io,
     stdout: *Io.Writer,
     stderr: *Io.Writer,

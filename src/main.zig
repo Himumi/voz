@@ -16,6 +16,7 @@ pub fn main(init: std.process.Init) !void {
     const stderr = &stderr_writer.interface;
 
     var ctx: Context = .{
+        .allocator = init.arena.allocator(),
         .io = init.io,
         .stdout = stdout,
         .stderr = stderr,
