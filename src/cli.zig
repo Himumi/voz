@@ -1,11 +1,29 @@
+const builtin = @import("builtin");
 const std = @import("std");
+const http = std.http;
+const json = std.json;
 const mem = std.mem;
 const testing = std.testing;
+
+const Allocator = mem.Allocator;
+const Client = http.Client;
 const Io = std.Io;
 
-const Context = @import("root.zig").Context;
+const list = @import("list.zig");
+const root = @import("root.zig");
+const Context = root.Context;
+const Setting = root.Setting;
 
 pub fn run(ctx: *Context, command: Command) !void {
+    const options = command.options;
+
+    const config_str = try root.readFile(ctx.allocator, ctx.io, Setting.file_name);
+    defer ctx.allocator.free(config_str);
+
+    // It borrows the string memory.
+    const config = try json.parseFromSlice(Setting, ctx.allocator, config_str, .{});
+    defer config.deinit();
+
     switch (command.kind) {
         .help => return try printHelp(ctx, help_message),
         .install => {
@@ -14,9 +32,17 @@ pub fn run(ctx: *Context, command: Command) !void {
             }
         },
         .list => {
-            if (command.options.help) {
+            const is_help = options.help or options.force or options.no_zls or options.sync;
+            if (is_help) {
                 return try printHelp(ctx, list_message);
             }
+
+            if (options.local) {
+                return try list.runLocal(ctx, config.value);
+            }
+
+            try root.updateVersions(ctx, config.value);
+            try list.run(ctx, config.value);
         },
         .remove => {
             if (command.options.help) {

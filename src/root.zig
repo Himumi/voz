@@ -1,7 +1,9 @@
 const std = @import("std");
+const http = std.http;
 const json = std.json;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const Client = http.Client;
 
 pub const cli = @import("cli.zig");
 
@@ -106,4 +108,55 @@ pub fn initZlsVersions(io: Io) !void {
         break :blk try cwd.createFile(io, zls_versions, .{});
     };
     defer file.close(io);
+}
+
+pub fn readFile(gpa: Allocator, io: Io, path: []const u8) ![]const u8 {
+    return try Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited);
+}
+
+pub fn writeFile(io: Io, path: []const u8, content: []const u8) !void {
+    const file = try Io.Dir.cwd().openFile(io, path, .{ .mode = .write_only });
+    defer file.close(io);
+
+    try file.writeStreamingAll(io, content);
+}
+
+pub fn updateVersions(ctx: *Context, config: Setting) !void {
+    var zig_async = ctx
+        .io
+        .async(updateVersion, .{ ctx, zig_versions, config.zig_url });
+    defer zig_async.cancel(ctx.io) catch {};
+
+    var zls_async = ctx
+        .io
+        .async(updateVersion, .{ ctx, zls_versions, config.zls_url });
+    defer zls_async.cancel(ctx.io) catch {};
+
+    try zig_async.await(ctx.io);
+    try zls_async.await(ctx.io);
+}
+
+pub fn updateVersion(ctx: *Context, path: []const u8, url: []const u8) !void {
+    var response: Io.Writer.Allocating = .init(ctx.allocator);
+    defer response.deinit();
+
+    var result = try httpGet(ctx, &response.writer, url);
+    if (result.status.class() != .success)
+        return error.FailedToGetVersions;
+
+    try writeFile(ctx.io, path, response.written());
+}
+
+pub fn httpGet(ctx: *Context, writer: *Io.Writer, url: []const u8) !Client.FetchResult {
+    var client: std.http.Client = .{
+        .allocator = ctx.allocator,
+        .io = ctx.io,
+    };
+    defer client.deinit();
+
+    return try client.fetch(.{
+        .location = .{ .url = url },
+        .method = .GET,
+        .response_writer = writer,
+    });
 }
