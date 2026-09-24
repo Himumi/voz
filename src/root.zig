@@ -1,6 +1,7 @@
 const std = @import("std");
 const http = std.http;
 const json = std.json;
+const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Client = http.Client;
@@ -176,4 +177,11 @@ pub fn httpGet(ctx: *Context, writer: *Io.Writer, url: []const u8) !Client.Fetch
         .method = .GET,
         .response_writer = writer,
     });
+}
+
+pub fn containsString(list: []const []const u8, target: []const u8) bool {
+    for (list) |item| {
+        if (mem.eql(u8, item, target)) return true;
+    }
+    return false;
 }

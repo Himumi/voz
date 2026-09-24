@@ -80,7 +80,7 @@ const installed_symbol = "[ ]";
 const using_symbol = "[X]";
 
 fn getStatus(setting: Setting, version: []const u8) []const u8 {
-    const symbol = if (containsString(setting.locals, version))
+    const symbol = if (root.containsString(setting.locals, version))
         installed_symbol
     else
         "";
@@ -100,13 +100,6 @@ fn getMasterVersion(list: []const []const u8) ?[]const u8 {
         return list[index];
     }
     return null;
-}
-
-fn containsString(list: []const []const u8, target: []const u8) bool {
-    for (list) |item| {
-        if (mem.eql(u8, item, target)) return true;
-    }
-    return false;
 }
 
 // test "runList" {
