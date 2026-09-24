@@ -1,14 +1,17 @@
 const builtin = @import("builtin");
 const std = @import("std");
+const fmt = std.fmt;
 const http = std.http;
 const json = std.json;
 const mem = std.mem;
+const tar = std.tar;
 const testing = std.testing;
 
 const Allocator = mem.Allocator;
 const Client = http.Client;
 const Io = std.Io;
 
+const install = @import("install.zig");
 const list = @import("list.zig");
 const root = @import("root.zig");
 const Context = root.Context;
@@ -27,9 +30,15 @@ pub fn run(ctx: *Context, command: Command) !void {
     switch (command.kind) {
         .help => return try printHelp(ctx, help_message),
         .install => {
-            if (command.options.help) {
+            if (command.options.help or command.version == null) {
                 return try printHelp(ctx, install_message);
             }
+
+            if (try root.shouldUpdateVersions(ctx.io)) {
+                try root.updateVersions(ctx, config.value);
+            }
+
+            return try install.run(ctx, config.value, command);
         },
         .list => {
             const is_help = options.help or options.force or options.no_zls or options.sync;
