@@ -122,6 +122,22 @@ pub fn writeFile(io: Io, path: []const u8, content: []const u8) !void {
     try file.writeStreamingAll(io, content);
 }
 
+pub fn shouldUpdateVersions(io: Io) !bool {
+    const cwd = Io.Dir.cwd();
+    const stat = cwd.statFile(io, zig_versions, .{}) catch |err| switch (err) {
+        error.FileNotFound => return true,
+        else => return err,
+    };
+
+    const now_ns = std.Io.Clock.real.now(io).nanoseconds;
+    const last_modified = stat.mtime.nanoseconds;
+    const duration = now_ns - last_modified;
+
+    // 24 hours in nanoseconds
+    const ttl: u64 = 24 * 3600 * std.time.ns_per_s;
+    return duration > ttl;
+}
+
 pub fn updateVersions(ctx: *Context, config: Setting) !void {
     var zig_async = ctx
         .io
