@@ -54,20 +54,29 @@ pub const bin = "bin";
 pub const zig_versions = "zigVersions.json";
 pub const zls_versions = "zlsVersions.json";
 
-pub fn initFiles(io: Io) !void {
-    try initSetting(io);
-    try initZigVersions(io);
-    try initZlsVersions(io);
+pub fn initFiles(ctx: *Context) !void {
+    var setting_async = ctx.io.async(initSetting, .{ctx.io});
+    defer setting_async.cancel(ctx.io) catch {};
+
+    var zig_async = ctx.io.async(initZigVersions, .{ctx});
+    defer zig_async.cancel(ctx.io) catch {};
+
+    var zls_async = ctx.io.async(initZlsVersions, .{ctx});
+    defer zls_async.cancel(ctx.io) catch {};
+
+    try setting_async.await(ctx.io);
+    try zig_async.await(ctx.io);
+    try zls_async.await(ctx.io);
 }
 
-pub fn initBin(io: Io) !void {
-    const cwd = Io.Dir.cwd();
-    const dir = cwd.openDir(io, bin, .{}) catch |err| {
-        if (err != error.FileNotFound) return err;
-        return try cwd.createDir(io, bin, .default_dir);
-    };
-    defer dir.close(io);
-}
+// pub fn initBin(io: Io) !void {
+//     const cwd = Io.Dir.cwd();
+//     const dir = cwd.openDir(io, bin, .{}) catch |err| {
+//         if (err != error.FileNotFound) return err;
+//         return try cwd.createDir(io, bin, .default_dir);
+//     };
+//     defer dir.close(io);
+// }
 
 pub fn initSetting(io: Io) !void {
     const cwd = Io.Dir.cwd();
@@ -92,24 +101,34 @@ pub fn initSetting(io: Io) !void {
     }
 }
 
-pub fn initZigVersions(io: Io) !void {
+pub fn initZigVersions(ctx: *Context) !void {
     const cwd = Io.Dir.cwd();
-    const file = cwd.openFile(io, zig_versions, .{}) catch |err| blk: {
+    if (cwd.openFile(ctx.io, zig_versions, .{})) |file| {
+        file.close(ctx.io);
+    } else |err| {
         if (err != error.FileNotFound) return err;
-        // TODO: Need to fetch the latest for init.
-        break :blk try cwd.createFile(io, zig_versions, .{});
-    };
-    defer file.close(io);
+
+        const file = try cwd.createFile(ctx.io, zig_versions, .{});
+        file.close(ctx.io);
+
+        // Fetch the content from ziglang.org
+        try updateVersion(ctx, zig_versions, default_setting.zig_url);
+    }
 }
 
-pub fn initZlsVersions(io: Io) !void {
+pub fn initZlsVersions(ctx: *Context) !void {
     const cwd = Io.Dir.cwd();
-    const file = cwd.openFile(io, zls_versions, .{}) catch |err| blk: {
+    if (cwd.openFile(ctx.io, zls_versions, .{})) |file| {
+        file.close(ctx.io);
+    } else |err| {
         if (err != error.FileNotFound) return err;
-        // TODO: Need to fetch the latest for init.
-        break :blk try cwd.createFile(io, zls_versions, .{});
-    };
-    defer file.close(io);
+
+        const file = try cwd.createFile(ctx.io, zls_versions, .{});
+        file.close(ctx.io);
+
+        // Fetch the content from zigtools.org
+        try updateVersion(ctx, zls_versions, default_setting.zls_url);
+    }
 }
 
 pub fn readFile(gpa: Allocator, io: Io, path: []const u8) ![]const u8 {

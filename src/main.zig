@@ -22,7 +22,7 @@ pub fn main(init: std.process.Init) !void {
         .stderr = stderr,
     };
 
-    try voz.initFiles(ctx.io);
+    try voz.initFiles(&ctx);
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len <= 1) {
