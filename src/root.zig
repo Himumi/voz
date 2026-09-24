@@ -54,7 +54,6 @@ pub const zig_versions = "zigVersions.json";
 pub const zls_versions = "zlsVersions.json";
 
 pub fn initFiles(io: Io) !void {
-    try initBin(io);
     try initSetting(io);
     try initZigVersions(io);
     try initZlsVersions(io);
@@ -96,6 +95,7 @@ pub fn initZigVersions(io: Io) !void {
     const cwd = Io.Dir.cwd();
     const file = cwd.openFile(io, zig_versions, .{}) catch |err| blk: {
         if (err != error.FileNotFound) return err;
+        // TODO: Need to fetch the latest for init.
         break :blk try cwd.createFile(io, zig_versions, .{});
     };
     defer file.close(io);
@@ -105,6 +105,7 @@ pub fn initZlsVersions(io: Io) !void {
     const cwd = Io.Dir.cwd();
     const file = cwd.openFile(io, zls_versions, .{}) catch |err| blk: {
         if (err != error.FileNotFound) return err;
+        // TODO: Need to fetch the latest for init.
         break :blk try cwd.createFile(io, zls_versions, .{});
     };
     defer file.close(io);
