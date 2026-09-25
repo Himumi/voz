@@ -10,13 +10,13 @@ const cli = @import("cli.zig");
 const root = @import("root.zig");
 const Command = cli.Command;
 const Context = root.Context;
-const Setting = root.Setting;
+const Config = root.Config;
 
-pub fn run(ctx: *Context, config: Setting, command: Command) !void {
+pub fn run(ctx: *Context, config: Config, command: Command) !void {
     const cwd = Io.Dir.cwd();
     const version = command.version.?;
 
-    const zig_str = try root.readFile(ctx.allocator, ctx.io, root.zig_versions);
+    const zig_str = try root.readFile(ctx.allocator, ctx.io, root.zig_file);
     defer ctx.allocator.free(zig_str);
 
     // It borrows string memory.
@@ -43,7 +43,7 @@ pub fn run(ctx: *Context, config: Setting, command: Command) !void {
         }
     }
 
-    cwd.deleteFile(ctx.io, "bin") catch |err| switch (err) {
+    cwd.deleteFile(ctx.io, root.bin_file) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     };
@@ -62,13 +62,13 @@ pub fn run(ctx: *Context, config: Setting, command: Command) !void {
     try moveZig(ctx.io, version, target_version);
     if (zls_result) try moveZls(ctx.io, target_version);
 
-    try cwd.symLink(ctx.io, version, "bin", .{ .is_directory = true });
+    try cwd.symLink(ctx.io, version, root.bin_file, .{ .is_directory = true });
     try updateConfig(ctx, config, target_version);
 
     try ctx.stderr.print("Installed {s}\n", .{target_version});
 }
 
-fn hasInstalled(io: Io, config: Setting, command: Command) !bool {
+fn hasInstalled(io: Io, config: Config, command: Command) !bool {
     const cwd = Io.Dir.cwd();
     const version = command.version.?;
 
@@ -84,7 +84,7 @@ fn hasInstalled(io: Io, config: Setting, command: Command) !bool {
     return true;
 }
 
-fn isOutdated(config: Setting, zig: json.Value, version: []const u8) bool {
+fn isOutdated(config: Config, zig: json.Value, version: []const u8) bool {
     if (!mem.eql(u8, version, "master")) return false;
 
     const master_version = zig.object.get("master").?.object.get("version").?.string;
@@ -125,7 +125,7 @@ fn handleZls(ctx: *Context, command: Command) !bool {
     if (command.options.no_zls) return false;
     const version = command.version.?;
 
-    const zls_str = try root.readFile(ctx.allocator, ctx.io, root.zls_versions);
+    const zls_str = try root.readFile(ctx.allocator, ctx.io, root.zls_file);
     defer ctx.allocator.free(zls_str);
 
     const zls = try json.parseFromSlice(json.Value, ctx.allocator, zls_str, .{});
@@ -157,7 +157,7 @@ fn handleZls(ctx: *Context, command: Command) !bool {
     return true;
 }
 
-fn updateConfig(ctx: *Context, config: Setting, target_version: []const u8) !void {
+fn updateConfig(ctx: *Context, config: Config, target_version: []const u8) !void {
     const cwd = Io.Dir.cwd();
     var temp = config;
 
@@ -189,7 +189,7 @@ fn updateConfig(ctx: *Context, config: Setting, target_version: []const u8) !voi
     temp.locals = versions.items;
 
     // Update config file.
-    const config_file = try cwd.createFile(ctx.io, Setting.file_name, .{ .truncate = true });
+    const config_file = try cwd.createFile(ctx.io, root.config_file, .{ .truncate = true });
     defer config_file.close(ctx.io);
 
     var buffer: [1024]u8 = undefined;

@@ -15,16 +15,16 @@ const install = @import("install.zig");
 const list = @import("list.zig");
 const root = @import("root.zig");
 const Context = root.Context;
-const Setting = root.Setting;
+const Config = root.Config;
 
 pub fn run(ctx: *Context, command: Command) !void {
     const options = command.options;
 
-    const config_str = try root.readFile(ctx.allocator, ctx.io, Setting.file_name);
+    const config_str = try root.readFile(ctx.allocator, ctx.io, root.config_file);
     defer ctx.allocator.free(config_str);
 
     // It borrows the string memory.
-    const config = try json.parseFromSlice(Setting, ctx.allocator, config_str, .{});
+    const config = try json.parseFromSlice(Config, ctx.allocator, config_str, .{});
     defer config.deinit();
 
     switch (command.kind) {
