@@ -15,14 +15,17 @@ pub fn main(init: std.process.Init) !void {
     var stderr_writer = std.Io.File.stderr().writer(init.io, &stderr_buffer);
     const stderr = &stderr_writer.interface;
 
+    const arena = init.arena.allocator();
+    const io = init.io;
+
     var ctx: Context = .{
-        .allocator = init.arena.allocator(),
-        .io = init.io,
+        .allocator = arena,
+        .io = io,
         .stdout = stdout,
         .stderr = stderr,
     };
 
-    try voz.initFiles(&ctx);
+    try voz.initFiles(arena, io);
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len <= 1) {

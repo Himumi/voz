@@ -123,7 +123,7 @@ fn handleZig(ctx: *Context, zig_target: json.Value, message_queue: *Io.Queue([]c
 
     try message_queue.putOne(ctx.io, "Downloading zig...\n");
 
-    const result = try root.httpGet(ctx, &response.writer, tarball_url);
+    const result = try root.httpGet(ctx.allocator, ctx.io, &response.writer, tarball_url);
     if (result.status.class() != .success) return error.FailedGetRequest;
 
     try message_queue.putAll(ctx.io, &.{
@@ -156,7 +156,7 @@ fn handleZls(ctx: *Context, command: Command, message_queue: *Io.Queue([]const u
 
     try message_queue.putOne(ctx.io, "Downloading zls...\n");
 
-    const zls_result = try root.httpGet(ctx, &response.writer, tarball_url);
+    const zls_result = try root.httpGet(ctx.allocator, ctx.io, &response.writer, tarball_url);
     if (zls_result.status.class() != .success) return error.FailedGetRequest;
 
     const cwd = Io.Dir.cwd();

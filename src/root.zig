@@ -49,19 +49,19 @@ pub const bin_file = "bin";
 pub const zig_file = "zig.json";
 pub const zls_file = "zls.json";
 
-pub fn initFiles(ctx: *Context) !void {
-    var config_async = ctx.io.async(initConfig, .{ctx.io});
-    defer config_async.cancel(ctx.io) catch {};
+pub fn initFiles(gpa: Allocator, io: Io) !void {
+    var config_async = io.async(initConfig, .{io});
+    defer config_async.cancel(io) catch {};
 
-    var zig_async = ctx.io.async(initZigVersions, .{ctx});
-    defer zig_async.cancel(ctx.io) catch {};
+    var zig_async = io.async(initZig, .{ gpa, io });
+    defer zig_async.cancel(io) catch {};
 
-    var zls_async = ctx.io.async(initZlsVersions, .{ctx});
-    defer zls_async.cancel(ctx.io) catch {};
+    var zls_async = io.async(initZls, .{ gpa, io });
+    defer zls_async.cancel(io) catch {};
 
-    try config_async.await(ctx.io);
-    try zig_async.await(ctx.io);
-    try zls_async.await(ctx.io);
+    try config_async.await(io);
+    try zig_async.await(io);
+    try zls_async.await(io);
 }
 
 pub fn initConfig(io: Io) !void {
@@ -84,33 +84,33 @@ pub fn initConfig(io: Io) !void {
     }
 }
 
-pub fn initZigVersions(ctx: *Context) !void {
+pub fn initZig(gpa: Allocator, io: Io) !void {
     const cwd = Io.Dir.cwd();
-    if (cwd.openFile(ctx.io, zig_file, .{})) |file| {
-        file.close(ctx.io);
+    if (cwd.openFile(io, zig_file, .{})) |file| {
+        file.close(io);
     } else |err| {
         if (err != error.FileNotFound) return err;
 
-        const file = try cwd.createFile(ctx.io, zig_file, .{});
-        file.close(ctx.io);
+        const file = try cwd.createFile(io, zig_file, .{});
+        file.close(io);
 
         // Fetch the content from ziglang.org
-        try updateVersion(ctx, zig_file, default_config.zig_url);
+        try updateVersion(gpa, io, zig_file, default_config.zig_url);
     }
 }
 
-pub fn initZlsVersions(ctx: *Context) !void {
+pub fn initZls(gpa: Allocator, io: Io) !void {
     const cwd = Io.Dir.cwd();
-    if (cwd.openFile(ctx.io, zls_file, .{})) |file| {
-        file.close(ctx.io);
+    if (cwd.openFile(io, zls_file, .{})) |file| {
+        file.close(io);
     } else |err| {
         if (err != error.FileNotFound) return err;
 
-        const file = try cwd.createFile(ctx.io, zls_file, .{});
-        file.close(ctx.io);
+        const file = try cwd.createFile(io, zls_file, .{});
+        file.close(io);
 
         // Fetch the content from zigtools.org
-        try updateVersion(ctx, zls_file, default_config.zls_url);
+        try updateVersion(gpa, io, zls_file, default_config.zls_url);
     }
 }
 
@@ -141,37 +141,30 @@ pub fn shouldUpdateVersions(io: Io) !bool {
     return duration > ttl;
 }
 
-pub fn updateVersions(ctx: *Context, config: Config) !void {
-    var zig_async = ctx
-        .io
-        .async(updateVersion, .{ ctx, zig_file, config.zig_url });
-    defer zig_async.cancel(ctx.io) catch {};
+pub fn updateVersions(gpa: Allocator, io: Io, config: Config) !void {
+    var zig_async = io.async(updateVersion, .{ gpa, io, zig_file, config.zig_url });
+    defer zig_async.cancel(io) catch {};
 
-    var zls_async = ctx
-        .io
-        .async(updateVersion, .{ ctx, zls_file, config.zls_url });
-    defer zls_async.cancel(ctx.io) catch {};
+    var zls_async = io.async(updateVersion, .{ gpa, io, zls_file, config.zls_url });
+    defer zls_async.cancel(io) catch {};
 
-    try zig_async.await(ctx.io);
-    try zls_async.await(ctx.io);
+    try zig_async.await(io);
+    try zls_async.await(io);
 }
 
-pub fn updateVersion(ctx: *Context, path: []const u8, url: []const u8) !void {
-    var response: Io.Writer.Allocating = .init(ctx.allocator);
+pub fn updateVersion(gpa: Allocator, io: Io, path: []const u8, url: []const u8) !void {
+    var response: Io.Writer.Allocating = .init(gpa);
     defer response.deinit();
 
-    var result = try httpGet(ctx, &response.writer, url);
+    var result = try httpGet(gpa, io, &response.writer, url);
     if (result.status.class() != .success)
         return error.FailedToGetVersions;
 
-    try writeFile(ctx.io, path, response.written());
+    try writeFile(io, path, response.written());
 }
 
-pub fn httpGet(ctx: *Context, writer: *Io.Writer, url: []const u8) !Client.FetchResult {
-    var client: std.http.Client = .{
-        .allocator = ctx.allocator,
-        .io = ctx.io,
-    };
+pub fn httpGet(gpa: Allocator, io: Io, writer: *Io.Writer, url: []const u8) !Client.FetchResult {
+    var client: std.http.Client = .{ .allocator = gpa, .io = io };
     defer client.deinit();
 
     return try client.fetch(.{

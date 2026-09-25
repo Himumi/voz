@@ -35,7 +35,7 @@ pub fn run(ctx: *Context, command: Command) !void {
             }
 
             if (try root.shouldUpdateVersions(ctx.io)) {
-                try root.updateVersions(ctx, config.value);
+                try root.updateVersions(ctx.allocator, ctx.io, config.value);
             }
 
             return try install.run(ctx, config.value, command);
@@ -50,7 +50,7 @@ pub fn run(ctx: *Context, command: Command) !void {
                 return try list.runLocal(ctx, config.value);
             }
 
-            try root.updateVersions(ctx, config.value);
+            try root.updateVersions(ctx.allocator, ctx.io, config.value);
             try list.run(ctx, config.value);
         },
         .remove => {
