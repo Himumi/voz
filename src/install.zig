@@ -23,8 +23,10 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
     const zig = try json.parseFromSlice(json.Value, ctx.allocator, zig_str, .{});
     defer zig.deinit();
 
-    const zig_target = zig.value.object.get(version) orelse
+    const zig_target = zig.value.object.get(version) orelse {
         return try ctx.stderr.print("not found version: {s}\n", .{version});
+    };
+
     const target_version = blk: {
         if (mem.eql(u8, version, "master")) {
             break :blk zig_target.object.get("version").?.string;
@@ -36,11 +38,10 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
     const is_outdated = isOutdated(config, zig.value, version);
 
     if (has_installed) {
-        if (is_outdated or command.options.force) {
-            try cwd.deleteTree(ctx.io, version);
-        } else {
+        if (!(is_outdated or command.options.force)) {
             return try ctx.stderr.print("has already installed: {s}\n", .{target_version});
         }
+        try cwd.deleteTree(ctx.io, version);
     }
 
     cwd.deleteFile(ctx.io, root.bin_file) catch |err| switch (err) {
@@ -48,12 +49,18 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
         else => return err,
     };
 
-    // TODO: Need clean up, checksum, and minisign handlers.
+    var queue_buffer: [8][]const u8 = undefined;
+    var queue: Io.Queue([]const u8) = .init(&queue_buffer);
+    defer queue.close(ctx.io);
 
-    var zig_async = ctx.io.async(handleZig, .{ ctx, zig_target });
+    var load_screen = ctx.io.async(loadScreen, .{ ctx.io, ctx.stderr, &queue });
+    defer load_screen.cancel(ctx.io) catch {};
+
+    // TODO: Need clean up, checksum, and minisign handlers.
+    var zig_async = ctx.io.async(handleZig, .{ ctx, zig_target, &queue });
     defer zig_async.cancel(ctx.io) catch {};
 
-    var zls_async = ctx.io.async(handleZls, .{ ctx, command });
+    var zls_async = ctx.io.async(handleZls, .{ ctx, command, &queue });
     defer _ = zls_async.cancel(ctx.io) catch {};
 
     try zig_async.await(ctx.io);
@@ -65,7 +72,7 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
     try cwd.symLink(ctx.io, version, root.bin_file, .{ .is_directory = true });
     try updateConfig(ctx, config, target_version);
 
-    try ctx.stderr.print("Installed {s}\n", .{target_version});
+    try ctx.stderr.print("Successfully installed {s}\n", .{target_version});
 }
 
 fn hasInstalled(io: Io, config: Config, command: Command) !bool {
@@ -97,7 +104,15 @@ fn isOutdated(config: Config, zig: json.Value, version: []const u8) bool {
     return true;
 }
 
-fn handleZig(ctx: *Context, zig_target: json.Value) !void {
+fn loadScreen(io: Io, writer: *Io.Writer, message_queue: *Io.Queue([]const u8)) !void {
+    while (true) {
+        const message = message_queue.getOne(io) catch return;
+        try writer.writeAll(message);
+        try writer.flush();
+    }
+}
+
+fn handleZig(ctx: *Context, zig_target: json.Value, message_queue: *Io.Queue([]const u8)) !void {
     var arch_buffer: [56]u8 = undefined;
     const arch_os = try bufPrintArchOs(&arch_buffer);
 
@@ -106,19 +121,21 @@ fn handleZig(ctx: *Context, zig_target: json.Value) !void {
     var response: Io.Writer.Allocating = .init(ctx.allocator);
     defer response.deinit();
 
+    try message_queue.putOne(ctx.io, "Downloading zig...\n");
+
     const result = try root.httpGet(ctx, &response.writer, tarball_url);
     if (result.status.class() != .success) return error.FailedGetRequest;
 
-    try ctx.stderr.writeAll("downloded zig binary\n");
-    try ctx.stderr.flush();
+    try message_queue.putAll(ctx.io, &.{
+        "Download zig complete!\n",
+        "Extracting zig...\n",
+    });
 
     try extractFromSlice(ctx, Io.Dir.cwd(), response.written());
-
-    try ctx.stderr.writeAll("extracted zig binary\n");
-    try ctx.stderr.flush();
+    try message_queue.putOne(ctx.io, "Extraction zig complete!\n");
 }
 
-fn handleZls(ctx: *Context, command: Command) !bool {
+fn handleZls(ctx: *Context, command: Command, message_queue: *Io.Queue([]const u8)) !bool {
     var arch_buffer: [56]u8 = undefined;
     const arch_os = try bufPrintArchOs(&arch_buffer);
 
@@ -137,11 +154,10 @@ fn handleZls(ctx: *Context, command: Command) !bool {
     var response: Io.Writer.Allocating = .init(ctx.allocator);
     defer response.deinit();
 
+    try message_queue.putOne(ctx.io, "Downloading zls...\n");
+
     const zls_result = try root.httpGet(ctx, &response.writer, tarball_url);
     if (zls_result.status.class() != .success) return error.FailedGetRequest;
-
-    try ctx.stderr.writeAll("downloded zls binary\n");
-    try ctx.stderr.flush();
 
     const cwd = Io.Dir.cwd();
     try cwd.createDir(ctx.io, "zls_temp", .default_dir);
@@ -149,10 +165,13 @@ fn handleZls(ctx: *Context, command: Command) !bool {
     const temp_dir = try cwd.openDir(ctx.io, "zls_temp", .{});
     defer temp_dir.close(ctx.io);
 
-    try extractFromSlice(ctx, temp_dir, response.written());
+    try message_queue.putAll(ctx.io, &.{
+        "Download zls complete!\n",
+        "Extracting zls...\n",
+    });
 
-    try ctx.stderr.writeAll("extracted zls binary\n");
-    try ctx.flush();
+    try extractFromSlice(ctx, temp_dir, response.written());
+    try message_queue.putOne(ctx.io, "Extraction zls complete!\n");
 
     return true;
 }
