@@ -43,6 +43,29 @@ pub const Config = struct {
         try file_writer.interface.flush();
     }
 
+    pub fn getLocalMaster(self: Config) ?[]const u8 {
+        for (self.locals, 0..) |version, index| {
+            if (isMaster(version)) {
+                return self.locals[index];
+            }
+        }
+        return null;
+    }
+
+    const installed_symbol = "[ ]";
+    const using_symbol = "[X]";
+
+    pub fn getStatus(self: Config, version: []const u8) []const u8 {
+        const symbol = if (containsString(self.locals, version))
+            installed_symbol
+        else
+            "";
+        return if (mem.eql(u8, self.zig, version))
+            using_symbol
+        else
+            symbol;
+    }
+
     pub fn isOutdated(self: Config, zig: json.Value, version: []const u8) bool {
         if (!mem.eql(u8, version, master_key)) return false;
 
@@ -101,7 +124,7 @@ pub const Config = struct {
     }
 };
 
-fn isMaster(raw_version: []const u8) bool {
+pub fn isMaster(raw_version: []const u8) bool {
     return mem.findAny(u8, raw_version, "dev") != null;
 }
 

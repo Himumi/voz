@@ -7,8 +7,28 @@ const root = @import("root.zig");
 const Context = root.Context;
 const Config = root.Config;
 
-fn printVersion(writer: *Io.Writer, args: anytype) !void {
-    try writer.print("{s:<10}{s:<5}{s:<10}{s}\n", args);
+const Kind = enum {
+    local,
+    remote,
+
+    pub fn string(self: Kind) []const u8 {
+        return switch (self) {
+            .local => "(local)",
+            .remote => "(remote)",
+        };
+    }
+};
+
+fn printVersion(
+    writer: *Io.Writer,
+    version: []const u8,
+    status: []const u8,
+    kind: ?Kind,
+    actual_version: ?[]const u8,
+) !void {
+    const repo_kind = if (kind) |repo| repo.string() else "";
+    const actual = actual_version orelse "";
+    try writer.print("{s:<10}{s:<5}{s:<10}{s}\n", .{ version, status, repo_kind, actual });
 }
 
 pub fn run(ctx: *Context, config: Config) !void {
@@ -31,11 +51,11 @@ pub fn runLocal(ctx: *Context, config: Config) !void {
     try printSeparator(writer);
 
     for (config.locals) |version| {
-        const status = getStatus(config, version);
-        if (mem.findAny(u8, version, "dev")) |_| {
-            try printVersion(writer, .{ "master", status, "", version });
+        const status = config.getStatus(version);
+        if (root.isMaster(version)) {
+            try printVersion(writer, root.master_key, status, null, version);
         } else {
-            try printVersion(writer, .{ version, status, "", "" });
+            try printVersion(writer, version, status, null, null);
         }
     }
 
@@ -49,22 +69,21 @@ fn printList(writer: *Io.Writer, config: Config, zig: json.ObjectMap) !void {
 
     // Skip master version.
     for (zig.keys()[1..]) |version| {
-        const status = getStatus(config, version);
-        try printVersion(writer, .{ version, status, "", "" });
+        const status = config.getStatus(version);
+        try printVersion(writer, version, status, null, null);
     }
 
-    const master_key = "master";
-    {
-        const version = zig.get(master_key).?.object.get("version").?.string;
-        const symbol = getStatus(config, version);
-        try printVersion(writer, .{ master_key, symbol, "(remote)", version });
-    }
+    const remote_actual = zig.get(root.master_key).?.object.get(root.version_key).?.string;
+    const remote_status = config.getStatus(remote_actual);
+    try printVersion(writer, root.master_key, remote_status, .remote, remote_actual);
+
     try printSeparator(writer);
 
-    if (getMasterVersion(config.locals)) |version| {
-        const symbol = getStatus(config, version);
-        try printVersion(writer, .{ master_key, symbol, "(local)", version });
+    if (config.getLocalMaster()) |local_actual| {
+        const local_status = config.getStatus(local_actual);
+        try printVersion(writer, root.master_key, local_status, .local, local_actual);
     }
+
     try printFooter(writer);
 }
 
@@ -76,30 +95,8 @@ fn printFooter(writer: *Io.Writer) !void {
     try writer.print("\n[ ]: installed [X]: current\n", .{});
 }
 
-const installed_symbol = "[ ]";
-const using_symbol = "[X]";
-
-fn getStatus(config: Config, version: []const u8) []const u8 {
-    const symbol = if (root.containsString(config.locals, version))
-        installed_symbol
-    else
-        "";
-    return if (mem.eql(u8, config.zig, version))
-        using_symbol
-    else
-        symbol;
-}
-
 fn printSeparator(writer: *Io.Writer) !void {
     try writer.print("{s:->50}\n", .{""});
-}
-
-fn getMasterVersion(list: []const []const u8) ?[]const u8 {
-    for (list, 0..) |version, index| {
-        _ = mem.find(u8, version, "dev") orelse continue;
-        return list[index];
-    }
-    return null;
 }
 
 // test "runList" {
