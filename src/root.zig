@@ -20,6 +20,10 @@ pub const Context = struct {
     }
 };
 
+pub const master_key = "master";
+pub const version_key = "version";
+pub const tarball_key = "tarball";
+
 pub const Config = struct {
     locals: []const []const u8,
     zig: []const u8,
@@ -28,11 +32,83 @@ pub const Config = struct {
     mirrorlist: []const u8,
     pubkey: []const u8,
 
-    pub fn write(self: Config, file_writer: *Io.Writer) !void {
-        try std.json.Stringify.value(self, .{ .whitespace = .indent_2 }, file_writer);
-        try file_writer.flush();
+    pub fn write(self: Config, io: Io) !void {
+        const file = try Io.Dir.cwd().createFile(io, config_file, .{ .truncate = true });
+        defer file.close(io);
+
+        var buffer: [512]u8 = undefined;
+        var file_writer = file.writer(io, &buffer);
+
+        try std.json.Stringify.value(self, .{ .whitespace = .indent_2 }, &file_writer.interface);
+        try file_writer.interface.flush();
+    }
+
+    pub fn isOutdated(self: Config, zig: json.Value, version: []const u8) bool {
+        if (!mem.eql(u8, version, master_key)) return false;
+
+        const master_version = zig.object.get(master_key).?.object.get(version_key).?.string;
+        for (self.locals) |local_version| {
+            if (!isMaster(local_version)) continue;
+            return mem.order(u8, local_version, master_version) == .lt;
+        }
+
+        // It does not have a master "dev" version.
+        return true;
+    }
+
+    pub fn hasInstalled(self: Config, io: Io, version: []const u8) !bool {
+        // - Check version availability.
+        if (containsString(self.locals, version)) return true;
+
+        const dir = Io.Dir.cwd().openDir(io, version, .{}) catch |err| switch (err) {
+            error.FileNotFound => return false,
+            else => return err,
+        };
+        defer dir.close(io);
+
+        return true;
+    }
+
+    pub fn update(self: Config, ctx: *Context, target_version: []const u8) !void {
+        var temp = self;
+        temp.zig = target_version;
+
+        var versions: std.ArrayList([]const u8) = .empty;
+        defer versions.deinit(ctx.allocator);
+
+        try versions.appendSlice(ctx.allocator, self.locals);
+        blk: {
+            for (self.locals, 0..) |version, index| {
+                // Break if it has a same version.
+                if (mem.eql(u8, version, target_version)) break :blk;
+
+                if (!isMaster(version) or !isMaster(target_version)) continue;
+
+                // Replace the "dev" version with a new version.
+                versions.items[index] = target_version;
+                break :blk;
+            }
+
+            // Append a new version at the end list.
+            try versions.append(ctx.allocator, target_version);
+        }
+        mem.sort([]const u8, versions.items, {}, lessThanByString);
+
+        // Replace the previous with the new versions.
+        temp.locals = versions.items;
+
+        try temp.write(ctx.io);
     }
 };
+
+fn isMaster(raw_version: []const u8) bool {
+    return mem.findAny(u8, raw_version, "dev") != null;
+}
+
+fn lessThanByString(context: void, lhs: []const u8, rhs: []const u8) bool {
+    _ = context;
+    return mem.order(u8, lhs, rhs) == .lt;
+}
 
 pub const default_config: Config = .{
     .locals = &.{},
@@ -72,15 +148,7 @@ pub fn initConfig(io: Io) !void {
         file.close(io);
     } else |err| {
         if (err != error.FileNotFound) return err;
-
-        const new_file = try cwd.createFile(io, config_file, .{});
-        defer new_file.close(io);
-
-        var buffer: [256]u8 = undefined;
-        var file_writer = new_file.writer(io, &buffer);
-        const interface = &file_writer.interface;
-
-        try default_config.write(interface);
+        try default_config.write(io);
     }
 }
 
