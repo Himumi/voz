@@ -20,9 +20,11 @@ pub const Context = struct {
     }
 };
 
+pub const dev_key = "dev";
 pub const master_key = "master";
 pub const version_key = "version";
 pub const tarball_key = "tarball";
+pub const shasum_key = "shasum";
 
 pub const Config = struct {
     locals: []const []const u8,
@@ -125,7 +127,7 @@ pub const Config = struct {
 };
 
 pub fn isMaster(raw_version: []const u8) bool {
-    return mem.findAny(u8, raw_version, "dev") != null;
+    return mem.findAny(u8, raw_version, dev_key) != null;
 }
 
 fn lessThanByString(context: void, lhs: []const u8, rhs: []const u8) bool {

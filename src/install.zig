@@ -1,12 +1,12 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const compress = std.compress;
 const fmt = std.fmt;
 const json = std.json;
 const mem = std.mem;
 const tar = std.tar;
-const xz = compress.xz;
+const xz = std.compress.xz;
 const Io = std.Io;
+const Sha256 = std.crypto.hash.sha2.Sha256;
 
 const cli = @import("cli.zig");
 const root = @import("root.zig");
@@ -76,7 +76,7 @@ fn installBinaries(ctx: *Context, zig_target: json.Value, command: Command) !voi
     var load_screen = ctx.io.async(loadScreen, .{ ctx.io, ctx.stderr, &queue });
     defer load_screen.cancel(ctx.io) catch {};
 
-    // TODO: Need clean up, checksum, and minisign handlers.
+    // TODO: Need clean up and minisign handlers.
     var zig_async = ctx.io.async(handleZig, .{ ctx, zig_target, &queue });
     defer zig_async.cancel(ctx.io) catch {};
 
@@ -92,6 +92,7 @@ fn installBinaries(ctx: *Context, zig_target: json.Value, command: Command) !voi
 
 fn handleZig(ctx: *Context, zig_target: json.Value, message_queue: *Io.Queue([]const u8)) !void {
     const tarball_url = try getTarballUrl(zig_target);
+    const shasum = try getShasum(zig_target);
 
     var response: Io.Writer.Allocating = .init(ctx.allocator);
     defer response.deinit();
@@ -99,12 +100,23 @@ fn handleZig(ctx: *Context, zig_target: json.Value, message_queue: *Io.Queue([]c
     try message_queue.putOne(ctx.io, "Downloading zig...\n");
 
     const result = try root.httpGet(ctx.allocator, ctx.io, &response.writer, tarball_url);
-    if (result.status.class() != .success) return error.FailedGetRequest;
+    if (result.status.class() != .success) {
+        try message_queue.putOne(ctx.io, "Failed downloading zig binary\n");
+        return error.FailedGetRequest;
+    }
 
     try message_queue.putOne(ctx.io, "Download zig complete!\n");
 
+    checksum(response.written(), shasum) catch |err| {
+        try message_queue.putOne(ctx.io, "Invalid zig shasum\n");
+        return err;
+    };
+
     try message_queue.putOne(ctx.io, "Extracting zig...\n");
-    try extractFromSlice(ctx, Io.Dir.cwd(), response.written());
+    extractFromSlice(ctx, Io.Dir.cwd(), response.written()) catch |err| {
+        try message_queue.putOne(ctx.io, "Failed extracting compressed zig\n");
+        return err;
+    };
 
     try message_queue.putOne(ctx.io, "Extraction zig complete!\n");
 }
@@ -121,6 +133,7 @@ fn handleZls(ctx: *Context, command: Command, message_queue: *Io.Queue([]const u
 
     const zls_target = zls.value.object.get(version) orelse return false;
     const tarball_url = try getTarballUrl(zls_target);
+    const shasum = try getShasum(zls_target);
 
     var response: Io.Writer.Allocating = .init(ctx.allocator);
     defer response.deinit();
@@ -128,9 +141,17 @@ fn handleZls(ctx: *Context, command: Command, message_queue: *Io.Queue([]const u
     try message_queue.putOne(ctx.io, "Downloading zls...\n");
 
     const zls_result = try root.httpGet(ctx.allocator, ctx.io, &response.writer, tarball_url);
-    if (zls_result.status.class() != .success) return error.FailedGetRequest;
+    if (zls_result.status.class() != .success) {
+        try message_queue.putOne(ctx.io, "Failed downloading zls binary\n");
+        return error.FailedGetRequest;
+    }
 
     try message_queue.putOne(ctx.io, "Download zls complete!\n");
+
+    checksum(response.written(), shasum) catch |err| {
+        try message_queue.putOne(ctx.io, "Invalid zls shasum\n");
+        return err;
+    };
 
     const cwd = Io.Dir.cwd();
     try cwd.createDir(ctx.io, zls_temp, .default_dir);
@@ -139,7 +160,10 @@ fn handleZls(ctx: *Context, command: Command, message_queue: *Io.Queue([]const u
     defer temp_dir.close(ctx.io);
 
     try message_queue.putOne(ctx.io, "Extracting zls...\n");
-    try extractFromSlice(ctx, temp_dir, response.written());
+    extractFromSlice(ctx, temp_dir, response.written()) catch |err| {
+        try message_queue.putOne(ctx.io, "Failed extracting compressed zls\n");
+        return err;
+    };
 
     try message_queue.putOne(ctx.io, "Extraction zls complete!\n");
     return true;
@@ -173,12 +197,28 @@ fn bufPrintArchOs(buffer: []u8) ![]const u8 {
     });
 }
 
+fn checksum(bytes: []const u8, expected: []const u8) !void {
+    var digest: [Sha256.digest_length]u8 = undefined;
+
+    Sha256.hash(bytes, &digest, .{});
+    const hex_digest = fmt.bytesToHex(digest, .lower);
+
+    if (!mem.eql(u8, &hex_digest, expected)) return error.InvalidChecksum;
+}
+
 fn extractFromSlice(ctx: *Context, target: Io.Dir, source: []const u8) !void {
     var reader: Io.Reader = .fixed(source);
     var decommpressor: xz.Decompress = try .init(&reader, ctx.allocator, &.{});
     defer decommpressor.deinit();
 
     try tar.extract(ctx.io, target, &decommpressor.reader, .{ .mode_mode = .executable_bit_only });
+}
+
+fn getShasum(target: json.Value) ![]const u8 {
+    var buffer: [56]u8 = undefined;
+    const arch_os = try bufPrintArchOs(&buffer);
+
+    return target.object.get(arch_os).?.object.get(root.shasum_key).?.string;
 }
 
 fn getTarballUrl(target: json.Value) ![]const u8 {
@@ -196,7 +236,7 @@ fn getTargetVersion(zig_target: json.Value, version: []const u8) []const u8 {
 }
 
 fn isMaster(raw_version: []const u8) bool {
-    return mem.findAny(u8, raw_version, "dev") != null;
+    return mem.findAny(u8, raw_version, root.dev_key) != null;
 }
 
 fn move(io: Io, old_path: []const u8, new_path: []const u8) !void {
