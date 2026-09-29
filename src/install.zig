@@ -14,6 +14,7 @@ const Command = cli.Command;
 const Context = root.Context;
 const Config = root.Config;
 
+const zig_temp = "zig_temp";
 const zls_temp = "zls_temp";
 const arch = builtin.target.cpu.arch;
 const os = builtin.target.os.tag;
@@ -41,20 +42,66 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
         if (!(is_outdated or command.options.force)) {
             return try ctx.stderr.print("has already installed: {s}\n", .{target_version});
         }
-        try cwd.deleteTree(ctx.io, version);
+        // Backup the installed directory.
+        try move(ctx.io, version, zig_temp);
     }
+    errdefer cleanUp(ctx.io, config, version, target_version) catch {};
 
     cwd.deleteFile(ctx.io, root.bin_file) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     };
 
+    // TODO: Need a minisign handler.
     try installBinaries(ctx, zig_target, command);
 
     try cwd.symLink(ctx.io, version, root.bin_file, .{ .is_directory = true });
     try config.update(ctx, target_version);
 
+    try deleteDir(ctx.io, zig_temp);
     try ctx.stderr.print("Successfully installed {s}\n", .{target_version});
+}
+
+fn cleanUp(io: Io, config: Config, version: []const u8, target_version: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+
+    var arch_buffer: [56]u8 = undefined;
+    const arch_os = try bufPrintArchOs(&arch_buffer);
+
+    var buffer: [512]u8 = undefined;
+    const zig_tarball = try fmt.bufPrint(&buffer, "zig-{s}-{s}.tar.xz", .{
+        arch_os,
+        target_version,
+    });
+    try deleteFile(io, zig_tarball);
+
+    const zls_tarball = try fmt.bufPrint(&buffer, "zls-{s}-{s}.tar.xz", .{
+        arch_os,
+        target_version,
+    });
+    try deleteFile(io, zls_tarball);
+
+    const zig_dir = try fmt.bufPrint(&buffer, "zig-{s}-{s}", .{
+        arch_os,
+        target_version,
+    });
+    try deleteDir(io, zig_dir);
+
+    try deleteDir(io, version);
+    try deleteDir(io, zls_temp);
+    try deleteFile(io, root.bin_file);
+
+    // Restore backup.
+    if (cwd.openDir(io, zig_temp, .{})) |zig_backup| {
+        zig_backup.close(io);
+
+        try move(io, zig_temp, version);
+        try cwd.symLink(io, version, root.bin_file, .{ .is_directory = true });
+
+        try config.write(io);
+    } else |err| {
+        if (err != error.FileNotFound) return err;
+    }
 }
 
 fn loadScreen(io: Io, writer: *Io.Writer, message_queue: *Io.Queue([]const u8)) !void {
@@ -76,7 +123,6 @@ fn installBinaries(ctx: *Context, zig_target: json.Value, command: Command) !voi
     var load_screen = ctx.io.async(loadScreen, .{ ctx.io, ctx.stderr, &queue });
     defer load_screen.cancel(ctx.io) catch {};
 
-    // TODO: Need clean up and minisign handlers.
     var zig_async = ctx.io.async(handleZig, .{ ctx, zig_target, &queue });
     defer zig_async.cancel(ctx.io) catch {};
 
@@ -204,6 +250,26 @@ fn checksum(bytes: []const u8, expected: []const u8) !void {
     const hex_digest = fmt.bytesToHex(digest, .lower);
 
     if (!mem.eql(u8, &hex_digest, expected)) return error.InvalidChecksum;
+}
+
+fn deleteFile(io: Io, path: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+    if (cwd.openFile(io, path, .{})) |file| {
+        file.close(io);
+        try cwd.deleteFile(io, path);
+    } else |err| {
+        if (err != error.FileNotFound) return err;
+    }
+}
+
+fn deleteDir(io: Io, path: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+    if (cwd.openDir(io, path, .{})) |dir| {
+        dir.close(io);
+        try cwd.deleteTree(io, path);
+    } else |err| {
+        if (err != error.FileNotFound) return err;
+    }
 }
 
 fn extractFromSlice(ctx: *Context, target: Io.Dir, source: []const u8) !void {
