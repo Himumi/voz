@@ -13,6 +13,7 @@ const Io = std.Io;
 
 const install = @import("install.zig");
 const list = @import("list.zig");
+const use = @import("use.zig");
 const root = @import("root.zig");
 const Context = root.Context;
 const Config = root.Config;
@@ -64,9 +65,18 @@ pub fn run(ctx: *Context, command: Command) !void {
             }
         },
         .use => {
-            if (command.options.help) {
+            const invalid_sync = !options.sync and command.version == null;
+            const has_action_flags =
+                options.help or
+                options.force or
+                options.no_zls or
+                options.local;
+
+            const invalid_flags = has_action_flags or invalid_sync;
+            if (invalid_flags) {
                 return try printHelp(ctx, use_message);
             }
+            try use.run(ctx, config.value, command);
         },
         .version => try ctx.stderr.print("0.0.0\n", .{}),
     }

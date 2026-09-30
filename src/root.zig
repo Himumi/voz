@@ -2,6 +2,7 @@ const std = @import("std");
 const http = std.http;
 const json = std.json;
 const mem = std.mem;
+const zon = std.zon;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Client = http.Client;
@@ -209,6 +210,25 @@ pub fn initZls(gpa: Allocator, io: Io) !void {
 
 pub fn readFile(gpa: Allocator, io: Io, path: []const u8) ![]const u8 {
     return try Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited);
+}
+
+pub fn readZon(comptime T: type, gpa: Allocator, io: Io, path: []const u8) !T {
+    const cwd = Io.Dir.cwd();
+
+    const file = try cwd.openFile(io, path, .{ .mode = .read_only });
+    defer file.close(io);
+
+    const stat = try file.stat(io);
+
+    const buffer = try gpa.allocSentinel(u8, stat.size, 0);
+    defer gpa.free(buffer);
+
+    const size = try file.readPositionalAll(io, buffer, 0);
+    if (size != stat.size) return error.InvalidFileSize;
+
+    return try zon
+        .parse
+        .fromSliceAlloc(T, gpa, buffer, null, .{ .ignore_unknown_fields = true });
 }
 
 pub fn writeFile(io: Io, path: []const u8, content: []const u8) !void {
