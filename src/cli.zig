@@ -57,12 +57,7 @@ pub fn run(ctx: *Context, command: Command) !void {
                 return try printHelp(ctx, list_message);
             }
 
-            if (options.local) {
-                return try list.runLocal(ctx, config.value);
-            }
-
-            try root.updateVersions(ctx.allocator, ctx.io, config.value);
-            try list.run(ctx, config.value);
+            try list.run(ctx, config.value, options.local);
         },
         .remove => {
             if (command.options.help) {

@@ -3,9 +3,11 @@ const json = std.json;
 const mem = std.mem;
 const Io = std.Io;
 
+const cli = @import("cli.zig");
 const root = @import("root.zig");
 const Context = root.Context;
 const Config = root.Config;
+const Command = cli.Command;
 
 const Kind = enum {
     local,
@@ -31,7 +33,14 @@ fn printVersion(
     try writer.print("{s:<10}{s:<5}{s:<10}{s}\n", .{ version, status, repo_kind, actual });
 }
 
-pub fn run(ctx: *Context, config: Config) !void {
+pub fn run(ctx: *Context, config: Config, is_local: bool) !void {
+    if (is_local) return try runLocal(ctx, config);
+
+    try root.updateVersions(ctx.allocator, ctx.io, config);
+    try runRemote(ctx, config);
+}
+
+fn runRemote(ctx: *Context, config: Config) !void {
     const zig_string = try root.readFile(ctx.allocator, ctx.io, root.zig_file);
     defer ctx.allocator.free(zig_string);
 
@@ -43,7 +52,7 @@ pub fn run(ctx: *Context, config: Config) !void {
     try ctx.flush();
 }
 
-pub fn runLocal(ctx: *Context, config: Config) !void {
+fn runLocal(ctx: *Context, config: Config) !void {
     if (config.locals.len == 0) return;
     const writer = ctx.stderr;
 
