@@ -31,7 +31,12 @@ pub fn run(ctx: *Context, command: Command) !void {
     switch (command.kind) {
         .help => return try printHelp(ctx, help_message),
         .install => {
-            if (command.options.help or command.version == null) {
+            const invalid_flags =
+                options.help or
+                options.sync or
+                options.local;
+
+            if (invalid_flags or command.version == null) {
                 return try printHelp(ctx, install_message);
             }
 
@@ -42,8 +47,13 @@ pub fn run(ctx: *Context, command: Command) !void {
             return try install.run(ctx, config.value, command);
         },
         .list => {
-            const is_help = options.help or options.force or options.no_zls or options.sync;
-            if (is_help) {
+            const invalid_flags =
+                options.help or
+                options.force or
+                options.no_zls or
+                options.sync;
+
+            if (invalid_flags) {
                 return try printHelp(ctx, list_message);
             }
 
