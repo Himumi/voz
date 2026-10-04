@@ -7,7 +7,10 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Client = http.Client;
 
+const zon_info = @import("zon_info");
+
 pub const cli = @import("cli.zig");
+pub const app_version: []const u8 = zon_info.version;
 
 pub const Context = struct {
     allocator: Allocator,

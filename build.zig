@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const manifest = @import("build.zig.zon");
+
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
 // executed by an external runner. The functions in `std.Build` implement a DSL
@@ -28,6 +30,11 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
+
+    const zon_mod = b.createModule(.{
+        .root_source_file = b.path("build.zig.zon"),
+    });
+
     const mod = b.addModule("voz", .{
         // The root source file is the "entry point" of this module. Users of
         // this module will only be able to access public declarations contained
@@ -39,6 +46,9 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        .imports = &.{
+            .{ .name = "zon_info", .module = zon_mod },
+        },
     });
 
     // Here we define an executable. An executable needs to have a root module

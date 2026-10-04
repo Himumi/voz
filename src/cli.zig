@@ -83,7 +83,7 @@ pub fn run(ctx: *Context, command: Command) !void {
             }
             try use.run(ctx, config.value, command);
         },
-        .version => try ctx.stderr.print("0.0.0\n", .{}),
+        .version => try ctx.stderr.print("{s}\n", .{root.app_version}),
     }
 }
 
