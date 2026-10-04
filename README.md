@@ -32,10 +32,10 @@ This is still a work in progress and is not yet at full desired features.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Install | base | Need clean up, checksum, and minisign handlers |
-| Use | none | none |
-| list | base | Need to add outdated status for dev version |
+| install | base | Need minisign handler and mirrorlist implementation |
+| use | base | none |
+| list | base | none |
 | remove | none | none |
 | help | done | none |
 | upgrade | none | none |
-| version | base | Hard coded version |
+| version | done | none |
