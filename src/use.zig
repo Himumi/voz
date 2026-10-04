@@ -1,7 +1,5 @@
 const std = @import("std");
-const json = std.json;
 const mem = std.mem;
-const zon = std.zon;
 const Io = std.Io;
 const Allocator = mem.Allocator;
 
@@ -49,7 +47,7 @@ fn handleSync(ctx: *Context, config: Config, command: Command) !void {
         if (err != error.FileNotFound) return err;
         return try ctx.stderr.writeAll(not_found_zon);
     };
-    defer zon.parse.free(ctx.allocator, parsed_zon);
+    defer root.freeZon(ctx.allocator, parsed_zon);
 
     if (parsed_zon.minimum_zig_version == null) {
         return try ctx.stderr.writeAll(not_found_minimum_version);
@@ -66,7 +64,7 @@ fn handleSync(ctx: *Context, config: Config, command: Command) !void {
         const config_str = try root.readFile(ctx.allocator, ctx.io, root.config_file);
         defer ctx.allocator.free(config_str);
 
-        const parsed_config = try json.parseFromSlice(root.Config, ctx.allocator, config_str, .{});
+        const parsed_config = try root.parseConfig(ctx.allocator, config_str);
         defer parsed_config.deinit();
 
         try switchVersion(ctx.io, parsed_config.value, local_version);

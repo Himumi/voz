@@ -1,5 +1,4 @@
 const std = @import("std");
-const epoch = std.time.epoch;
 
 const voz = @import("voz");
 const cli = voz.cli;

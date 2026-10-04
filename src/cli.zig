@@ -1,14 +1,11 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const fmt = std.fmt;
-const http = std.http;
 const json = std.json;
 const mem = std.mem;
-const tar = std.tar;
 const testing = std.testing;
 
 const Allocator = mem.Allocator;
-const Client = http.Client;
 const Io = std.Io;
 
 const install = @import("install.zig");
@@ -25,7 +22,7 @@ pub fn run(ctx: *Context, command: Command) !void {
     defer ctx.allocator.free(config_str);
 
     // It borrows the string memory.
-    const config = try json.parseFromSlice(Config, ctx.allocator, config_str, .{});
+    const config = try root.parseConfig(ctx.allocator, config_str);
     defer config.deinit();
 
     switch (command.kind) {

@@ -211,6 +211,10 @@ pub fn initZls(gpa: Allocator, io: Io) !void {
     }
 }
 
+pub fn parseConfig(gpa: Allocator, source: []const u8) !json.Parsed(Config) {
+    return try json.parseFromSlice(Config, gpa, source, .{});
+}
+
 pub fn readFile(gpa: Allocator, io: Io, path: []const u8) ![]const u8 {
     return try Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited);
 }
@@ -233,6 +237,8 @@ pub fn readZon(comptime T: type, gpa: Allocator, io: Io, path: []const u8) !T {
         .parse
         .fromSliceAlloc(T, gpa, buffer, null, .{ .ignore_unknown_fields = true });
 }
+
+pub const freeZon = zon.parse.free;
 
 pub fn writeFile(io: Io, path: []const u8, content: []const u8) !void {
     const file = try Io.Dir.cwd().openFile(io, path, .{ .mode = .write_only });
