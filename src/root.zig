@@ -82,7 +82,15 @@ pub const Config = struct {
     }
 
     pub fn hasInstalled(self: Config, io: Io, version: []const u8) !bool {
-        return containsString(self.locals, version) and try dirExists(io, version);
+        return self.containsVersion(version) and try dirExists(io, version);
+    }
+
+    pub fn containsVersion(self: Config, version: []const u8) bool {
+        for (self.locals) |local_version| {
+            const target_version = if (isMaster(local_version)) "master" else local_version;
+            if (mem.eql(u8, target_version, version)) return true;
+        }
+        return false;
     }
 
     pub fn update(self: Config, ctx: *Context, target_version: []const u8) !void {
