@@ -12,11 +12,11 @@ pub fn run(ctx: *Context, config: Config, raw_version: []const u8) !void {
     const cwd = Io.Dir.cwd();
 
     // Validate the selected version binary existence.
-    if (!try root.dirExists(ctx.io, raw_version))
+    if (!try config.hasInstalled(ctx.io, raw_version))
         return try ctx.stderr.print("Not found {s} version binary\n", .{raw_version});
 
     // Backup the target version.
-    try cwd.rename(raw_version, cwd, zig_temp, ctx.io);
+    try root.move(ctx.io, raw_version, zig_temp);
 
     // Delete after all operations.
     defer cwd.deleteTree(ctx.io, zig_temp) catch {};
@@ -81,15 +81,12 @@ fn cleanUp(
 ) !void {
     const cwd = Io.Dir.cwd();
     if (mem.eql(u8, config.zig, local_version)) {
-        const result = cwd.openFile(io, root.bin_file, .{});
-        if (result) |file| {
-            file.close(io);
-            try cwd.deleteFile(io, root.bin_file);
-        } else |err| {
-            if (err != error.FileNotFound) return err;
-        }
+        cwd.deleteFile(io, root.bin_file) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        };
         try cwd.symLink(io, raw_version, root.bin_file, .{ .is_directory = true });
     }
-    try cwd.rename(zig_temp, cwd, raw_version, io);
+    try root.move(io, zig_temp, raw_version);
     try config.write(io);
 }

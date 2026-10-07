@@ -43,7 +43,7 @@ pub fn run(ctx: *Context, config: Config, command: Command) !void {
             return try ctx.stderr.print("has already installed: {s}\n", .{target_version});
         }
         // Backup the installed directory.
-        try move(ctx.io, version, zig_temp);
+        try root.move(ctx.io, version, zig_temp);
     }
     errdefer cleanUp(ctx.io, config, version, target_version) catch {};
 
@@ -92,15 +92,10 @@ fn cleanUp(io: Io, config: Config, version: []const u8, target_version: []const 
     try deleteFile(io, root.bin_file);
 
     // Restore backup.
-    if (cwd.openDir(io, zig_temp, .{})) |zig_backup| {
-        zig_backup.close(io);
-
-        try move(io, zig_temp, version);
+    if (try root.dirExists(io, zig_temp)) {
+        try root.move(io, zig_temp, version);
         try cwd.symLink(io, version, root.bin_file, .{ .is_directory = true });
-
         try config.write(io);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
     }
 }
 
@@ -223,7 +218,7 @@ fn moveZig(io: Io, version: []const u8, target_version: []const u8) !void {
         target_version,
     });
 
-    try move(io, dir_name, version);
+    try root.move(io, dir_name, version);
 }
 
 // Move the zls to zig directory.
@@ -231,8 +226,8 @@ fn moveZls(io: Io, target_version: []const u8) !void {
     var buffer: [56]u8 = undefined;
     const new_path = try fmt.bufPrint(&buffer, "{s}/zls", .{target_version});
 
-    try move(io, "zls_temp/zls", new_path);
-    try Io.Dir.cwd().deleteTree(io, zls_temp);
+    try root.move(io, "zls_temp/zls", new_path);
+    try deleteDir(io, zls_temp);
 }
 
 /// Minimal buffer size is 56.
@@ -254,21 +249,16 @@ fn checksum(bytes: []const u8, expected: []const u8) !void {
 
 fn deleteFile(io: Io, path: []const u8) !void {
     const cwd = Io.Dir.cwd();
-    if (cwd.openFile(io, path, .{})) |file| {
-        file.close(io);
-        try cwd.deleteFile(io, path);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
-    }
+    cwd.deleteFile(io, path) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
 }
 
 fn deleteDir(io: Io, path: []const u8) !void {
     const cwd = Io.Dir.cwd();
-    if (cwd.openDir(io, path, .{})) |dir| {
-        dir.close(io);
+    if (try root.dirExists(io, path)) {
         try cwd.deleteTree(io, path);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
     }
 }
 
@@ -299,13 +289,4 @@ fn getTargetVersion(zig_target: json.Value, version: []const u8) []const u8 {
         return zig_target.object.get(root.version_key).?.string;
     }
     return version;
-}
-
-fn isMaster(raw_version: []const u8) bool {
-    return mem.findAny(u8, raw_version, root.dev_key) != null;
-}
-
-fn move(io: Io, old_path: []const u8, new_path: []const u8) !void {
-    const cwd = Io.Dir.cwd();
-    try cwd.rename(old_path, cwd, new_path, io);
 }

@@ -86,16 +86,7 @@ pub const Config = struct {
     }
 
     pub fn hasInstalled(self: Config, io: Io, version: []const u8) !bool {
-        // - Check version availability.
-        if (containsString(self.locals, version)) return true;
-
-        const dir = Io.Dir.cwd().openDir(io, version, .{}) catch |err| switch (err) {
-            error.FileNotFound => return false,
-            else => return err,
-        };
-        defer dir.close(io);
-
-        return true;
+        return containsString(self.locals, version) and try dirExists(io, version);
     }
 
     pub fn update(self: Config, ctx: *Context, target_version: []const u8) !void {
@@ -170,25 +161,14 @@ pub fn initFiles(gpa: Allocator, io: Io) !void {
 }
 
 pub fn initConfig(io: Io) !void {
-    const cwd = Io.Dir.cwd();
-    const union_file = cwd.openFile(io, config_file, .{});
-
-    if (union_file) |file| {
-        file.close(io);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
+    if (!try fileExists(io, config_file)) {
         try default_config.write(io);
     }
 }
 
 pub fn initZig(gpa: Allocator, io: Io) !void {
-    const cwd = Io.Dir.cwd();
-    if (cwd.openFile(io, zig_file, .{})) |file| {
-        file.close(io);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
-
-        const file = try cwd.createFile(io, zig_file, .{});
+    if (!try fileExists(io, zig_file)) {
+        const file = try Io.Dir.cwd().createFile(io, zig_file, .{});
         file.close(io);
 
         // Fetch the content from ziglang.org
@@ -197,13 +177,8 @@ pub fn initZig(gpa: Allocator, io: Io) !void {
 }
 
 pub fn initZls(gpa: Allocator, io: Io) !void {
-    const cwd = Io.Dir.cwd();
-    if (cwd.openFile(io, zls_file, .{})) |file| {
-        file.close(io);
-    } else |err| {
-        if (err != error.FileNotFound) return err;
-
-        const file = try cwd.createFile(io, zls_file, .{});
+    if (!try fileExists(io, zls_file)) {
+        const file = try Io.Dir.cwd().createFile(io, zls_file, .{});
         file.close(io);
 
         // Fetch the content from zigtools.org
@@ -232,6 +207,11 @@ pub fn fileExists(io: Io, path: []const u8) !bool {
     file.close(io);
 
     return true;
+}
+
+pub fn move(io: Io, old_path: []const u8, new_path: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+    try cwd.rename(old_path, cwd, new_path, io);
 }
 
 pub fn parseConfig(gpa: Allocator, source: []const u8) !json.Parsed(Config) {
