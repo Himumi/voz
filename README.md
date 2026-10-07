@@ -35,7 +35,7 @@ This is still a work in progress and is not yet at full desired features.
 | install | base | Need minisign handler and mirrorlist implementation |
 | use | base | none |
 | list | base | none |
-| remove | none | none |
+| remove | base | none |
 | help | done | none |
 | upgrade | none | none |
 | version | done | none |
