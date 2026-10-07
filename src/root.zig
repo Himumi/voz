@@ -50,10 +50,8 @@ pub const Config = struct {
     }
 
     pub fn getLocalMaster(self: Config) ?[]const u8 {
-        for (self.locals, 0..) |version, index| {
-            if (isMaster(version)) {
-                return self.locals[index];
-            }
+        for (self.locals) |version| {
+            if (isMaster(version)) return version;
         }
         return null;
     }
