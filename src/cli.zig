@@ -10,6 +10,7 @@ const Io = std.Io;
 
 const install = @import("install.zig");
 const list = @import("list.zig");
+const remove = @import("remove.zig");
 const use = @import("use.zig");
 const root = @import("root.zig");
 const Context = root.Context;
@@ -57,9 +58,12 @@ pub fn run(ctx: *Context, command: Command) !void {
             try list.run(ctx, config.value, options.local);
         },
         .remove => {
-            if (command.options.help) {
+            if (command.options.help or command.version == null) {
                 return try printHelp(ctx, remove_message);
             }
+
+            const raw_version = command.version orelse unreachable;
+            try remove.run(ctx, config.value, raw_version);
         },
         .upgrade => {
             if (command.options.help) {
