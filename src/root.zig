@@ -73,12 +73,10 @@ pub const Config = struct {
     pub fn isOutdated(self: Config, zig: json.Value, version: []const u8) bool {
         if (!mem.eql(u8, version, master_key)) return false;
 
-        const master_version = zig.object.get(master_key).?.object.get(version_key).?.string;
-        for (self.locals) |local_version| {
-            if (!isMaster(local_version)) continue;
-            return mem.order(u8, local_version, master_version) == .lt;
+        const remote_master = zig.object.get(master_key).?.object.get(version_key).?.string;
+        if (self.getLocalMaster()) |local_master| {
+            return mem.order(u8, local_master, remote_master) == .lt;
         }
-
         // It does not have a master "dev" version.
         return true;
     }
