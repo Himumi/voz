@@ -12,7 +12,7 @@ pub fn run(ctx: *Context, config: Config, raw_version: []const u8) !void {
     const cwd = Io.Dir.cwd();
 
     // Validate the selected version binary existence.
-    if (!try dirExists(ctx.io, raw_version))
+    if (!try root.dirExists(ctx.io, raw_version))
         return try ctx.stderr.print("Not found {s} version binary\n", .{raw_version});
 
     // Backup the target version.
@@ -63,29 +63,6 @@ pub fn run(ctx: *Context, config: Config, raw_version: []const u8) !void {
     try temp_config.write(ctx.io);
 
     try ctx.stderr.print("Deleted {s} version\n", .{raw_version});
-}
-
-fn dirExists(io: Io, path: []const u8) !bool {
-    const cwd = Io.Dir.cwd();
-    const dir = cwd.openDir(io, path, .{}) catch |err| switch (err) {
-        error.FileNotFound => false,
-        else => return err,
-    };
-    dir.close(io);
-
-    return true;
-}
-
-fn fileExists(io: Io, path: []const u8) !bool {
-    const cwd = Io.Dir.cwd();
-
-    const file = cwd.openFile(io, path, .{}) catch |err| switch (err) {
-        error.FileNotFound => return false,
-        else => return err,
-    };
-    file.close(io);
-
-    return true;
 }
 
 fn getLocalVersion(local_versions: []const []const u8, raw_version: []const u8) ?[]const u8 {

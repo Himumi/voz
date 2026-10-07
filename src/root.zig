@@ -211,6 +211,29 @@ pub fn initZls(gpa: Allocator, io: Io) !void {
     }
 }
 
+pub fn dirExists(io: Io, path: []const u8) !bool {
+    const cwd = Io.Dir.cwd();
+    const dir = cwd.openDir(io, path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return false,
+        else => return err,
+    };
+    dir.close(io);
+
+    return true;
+}
+
+pub fn fileExists(io: Io, path: []const u8) !bool {
+    const cwd = Io.Dir.cwd();
+
+    const file = cwd.openFile(io, path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return false,
+        else => return err,
+    };
+    file.close(io);
+
+    return true;
+}
+
 pub fn parseConfig(gpa: Allocator, source: []const u8) !json.Parsed(Config) {
     return try json.parseFromSlice(Config, gpa, source, .{});
 }
