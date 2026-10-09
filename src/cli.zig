@@ -71,14 +71,10 @@ pub fn run(ctx: *Context, command: Command) !void {
             }
         },
         .use => {
-            const invalid_sync = !options.sync and command.version == null;
-            const invalid_no_zls = !options.sync and options.no_zls;
-            const has_action_flags =
-                options.help or
-                options.force or
-                options.local;
+            const invalid_property = command.version == null or options.no_zls or options.force;
+            const invalid_sync = !options.sync and invalid_property;
 
-            const invalid_flags = has_action_flags or invalid_sync or invalid_no_zls;
+            const invalid_flags = options.help or options.local or invalid_sync;
             if (invalid_flags) {
                 return try printHelp(ctx, use_message);
             }
@@ -316,9 +312,12 @@ pub const use_message =
     \\
     \\Options:
     \\
-    \\  --sync     Synchronize Zig version with the local repository.
-    \\  --no-zls   Exclude Zls (only for --sync)
+    \\  --sync     Synchronize Zig version with 'zig.build.zon'
+    \\  --no-zls   Exclude ZLS
+    \\  --force    Force installation
     \\  --help     Print use command help message
+    \\
+    \\--no-zls and --force can only be used for --sync
     \\
     \\
 ;
