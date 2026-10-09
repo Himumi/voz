@@ -273,7 +273,7 @@ pub const Command = struct {
 };
 
 pub const help_message =
-    \\VOZ is a Zig Version Manager.
+    \\voz is a Zig Version Manager.
     \\
     \\Usage: voz [command] [options]
     \\
@@ -285,8 +285,8 @@ pub const help_message =
     \\  remove     Remove an installed Zig version
     \\
     \\  help       Print this help and exit
-    \\  upgrade    Upgrade VOZ version
-    \\  version    Print VOZ version and exit
+    \\  upgrade    Upgrade voz version
+    \\  version    Print voz version and exit
     \\
     \\
 ;
@@ -294,12 +294,12 @@ pub const help_message =
 pub const install_message =
     \\voz install - Download and install selected Zig version.
     \\
-    \\Usage: voz install [options] [ZIG VERSION]
+    \\Usage: voz install [options] [version]
     \\
     \\Options:
     \\
-    \\  --no-zls   Exclude ZLS
-    \\  --force    Force installation even if the version is installed
+    \\  --no-zls   Exclude Zls
+    \\  --force    Force installation
     \\  --help     Print install command help message
     \\
     \\
@@ -308,12 +308,12 @@ pub const install_message =
 pub const use_message =
     \\voz use - Switch between Zig versions.
     \\
-    \\Usage: voz use [options] [ZIG VERSION]
+    \\Usage: voz use [options] [version]
     \\
     \\Options:
     \\
-    \\  --sync     Synchronize Zig version with 'zig.build.zon'
-    \\  --no-zls   Exclude ZLS
+    \\  --sync     Synchronize Zig version with 'build.zig.zon'
+    \\  --no-zls   Exclude Zls
     \\  --force    Force installation
     \\  --help     Print use command help message
     \\
@@ -338,7 +338,7 @@ pub const list_message =
 pub const remove_message =
     \\voz remove - Remove an installed Zig version.
     \\
-    \\Usage: voz remove [options] [ZIG VERSION]
+    \\Usage: voz remove [options] [version]
     \\
     \\Options:
     \\
@@ -348,7 +348,7 @@ pub const remove_message =
 ;
 
 pub const upgrade_message =
-    \\voz upgrade - Upgrade VOZ version.
+    \\voz upgrade - Upgrade voz version.
     \\
     \\Usage: voz upgrade [options]
     \\
