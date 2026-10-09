@@ -45,24 +45,22 @@ pub fn run(ctx: *Context, config: Config, raw_version: []const u8) !void {
             else => return err,
         };
 
-        const version = if (locals.items.len == 0)
-            ""
-        else if (root.isMaster(locals.getLast()))
-            "master"
-        else
-            locals.getLast();
-
-        // Create a new link to the latest version.
-        if (version.len > 0) {
-            try cwd.symLink(ctx.io, version, root.bin_file, .{ .is_directory = true });
+        // Replace with the latest version.
+        temp_config.zig = if (locals.items.len == 0) "" else locals.getLast();
+        if (temp_config.zig.len > 0) {
+            try createBin(ctx.io, temp_config.zig);
         }
-        temp_config.zig = version;
     }
 
     // Update the config to the config file.
     try temp_config.write(ctx.io);
 
     try ctx.stderr.print("Deleted {s} version\n", .{raw_version});
+}
+
+fn createBin(io: Io, raw_version: []const u8) Io.Dir.SymLinkError!void {
+    const target_version = if (root.isMaster(raw_version)) "master" else raw_version;
+    try Io.Dir.cwd().symLink(io, target_version, root.bin_file, .{ .is_directory = true });
 }
 
 fn getLocalVersion(local_versions: []const []const u8, raw_version: []const u8) ?[]const u8 {
