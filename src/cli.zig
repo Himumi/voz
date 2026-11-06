@@ -17,8 +17,6 @@ const Context = root.Context;
 const Config = root.Config;
 
 pub fn run(ctx: *Context, command: Command) !void {
-    const options = command.options;
-
     const config_str = try root.readFile(ctx.allocator, ctx.io, root.config_file);
     defer ctx.allocator.free(config_str);
 
@@ -28,60 +26,77 @@ pub fn run(ctx: *Context, command: Command) !void {
 
     switch (command.kind) {
         .help => return try printHelp(ctx, help_message),
-        .install => {
-            const invalid_flags =
-                options.help or
-                options.sync or
-                options.local;
-
-            if (invalid_flags or command.version == null) {
-                return try printHelp(ctx, install_message);
-            }
-
-            if (try root.shouldUpdateVersions(ctx.io)) {
-                try root.updateVersions(ctx.allocator, ctx.io, config.value);
-            }
-
-            return try install.run(ctx, config.value, command);
-        },
-        .list => {
-            const invalid_flags =
-                options.help or
-                options.force or
-                options.no_zls or
-                options.sync;
-
-            if (invalid_flags) {
-                return try printHelp(ctx, list_message);
-            }
-
-            try list.run(ctx, config.value, options.local);
-        },
-        .remove => {
-            if (command.options.help or command.version == null) {
-                return try printHelp(ctx, remove_message);
-            }
-
-            const raw_version = command.version orelse unreachable;
-            try remove.run(ctx, config.value, raw_version);
-        },
+        .install => try runInstall(ctx, command, config.value),
+        .list => try runList(ctx, command, config.value),
+        .remove => try runRemove(ctx, command, config.value),
         .upgrade => {
             if (command.options.help) {
                 return try printHelp(ctx, upgrade_message);
             }
         },
-        .use => {
-            const invalid_property = command.version == null or options.no_zls or options.force;
-            const invalid_sync = !options.sync and invalid_property;
-
-            const invalid_flags = options.help or options.local or invalid_sync;
-            if (invalid_flags) {
-                return try printHelp(ctx, use_message);
-            }
-            try use.run(ctx, config.value, command);
-        },
+        .use => try runUse(ctx, command, config.value),
         .version => try ctx.stderr.print("{s}\n", .{root.app_version}),
     }
+}
+
+fn runInstall(ctx: *Context, command: Command, config: Config) !void {
+    const invalid_flags =
+        command.options.help or
+        command.options.sync or
+        command.options.local;
+
+    if (invalid_flags or command.version == null) {
+        return try printHelp(ctx, install_message);
+    }
+
+    if (try root.shouldUpdateVersions(ctx.io)) {
+        try root.updateVersions(ctx.allocator, ctx.io, config);
+    }
+
+    return try install.run(ctx, config, command);
+}
+
+fn runList(ctx: *Context, command: Command, config: Config) !void {
+    const invalid_flags =
+        command.options.help or
+        command.options.force or
+        command.options.no_zls or
+        command.options.sync;
+
+    if (invalid_flags) {
+        return try printHelp(ctx, list_message);
+    }
+
+    try list.run(ctx, config, command.options.local);
+}
+
+fn runRemove(ctx: *Context, command: Command, config: Config) !void {
+    if (command.options.help or command.version == null) {
+        return try printHelp(ctx, remove_message);
+    }
+
+    const raw_version = command.version orelse unreachable;
+    try remove.run(ctx, config, raw_version);
+}
+
+fn runUse(ctx: *Context, command: Command, config: Config) !void {
+    const invalid_property =
+        command.version == null or
+        command.options.no_zls or command.options.force;
+
+    const invalid_sync =
+        !command.options.sync and
+        invalid_property;
+
+    const invalid_flags =
+        command.options.help or
+        command.options.local or
+        invalid_sync;
+
+    if (invalid_flags) {
+        return try printHelp(ctx, use_message);
+    }
+    try use.run(ctx, config, command);
 }
 
 pub fn parse(args: []const [:0]const u8) error{InvalidOption}!Command {
